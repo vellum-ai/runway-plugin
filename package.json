@@ -1,0 +1,23 @@
+{
+  "name": "runway-plugin",
+  "version": "0.1.0",
+  "description": "Create, track, cancel, and download Runway Gen-4.5 videos conversationally.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "peerDependencies": {
+    "@vellumai/plugin-api": ">=0.8.0 <1.0.0"
+  },
+  "scripts": {
+    "test": "bun test",
+    "check": "tsc --noEmit"
+  },
+  "vellum": {},
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
+  }
+}

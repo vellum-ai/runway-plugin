@@ -1,0 +1,6 @@
+{
+  "model": "gen4.5",
+  "defaultDuration": 5,
+  "defaultRatio": "1280:720",
+  "outputDirectory": "scratch/runway"
+}
