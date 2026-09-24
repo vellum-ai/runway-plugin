@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ToolContext } from "@vellumai/plugin-api";
-import { cancelTask, createVideo, downloadTask, getTask, prepareVideo } from "../src/runway.js";
+import { cancelTask, createVideo, downloadTask, getTask, prepareVideo, setupApiKey } from "../src/runway.js";
 
 const ROOT = "/workspace/scratch/runway-plugin-test";
 const ID = "17f20503-6c24-4c16-946b-35dbbce2af2f";
@@ -20,6 +20,42 @@ const approved = (input: Record<string, unknown>): Record<string, unknown> => {
 };
 
 afterEach(async () => { await rm(ROOT, { recursive: true, force: true }); });
+
+describe("Runway API key setup", () => {
+  test("securely configures the key before video creation without contacting Runway", async () => {
+    let params: Record<string, unknown> | undefined;
+    const result = await setupApiKey({
+      conversationId: "test",
+      workingDir: ROOT,
+      requestSecret: async (request) => {
+        params = request;
+        return { value: "runway-secret", delivery: "transient_send" };
+      },
+    });
+    expect(result.isError).toBe(false);
+    expect(params).toMatchObject({
+      service: "Runway",
+      field: "RUNWAYML_API_SECRET",
+      allowedDomains: ["api.dev.runwayml.com"],
+    });
+    expect(params?.allowedTools).toContain("runway_setup_api_key");
+    expect(params?.allowedTools).toContain("runway_create_video");
+    expect(result.content).not.toContain("runway-secret");
+    expect(JSON.parse(result.content)).toMatchObject({ configured: true, key_exposed: false, credits_spent: 0 });
+  });
+
+  test("stops cleanly when the user does not add a key", async () => {
+    const result = await setupApiKey(ctx(null));
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("Runway API key is required");
+  });
+
+  test("reports when secure credential entry is unavailable", async () => {
+    const result = await setupApiKey({ conversationId: "test", workingDir: ROOT });
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("secure credential entry is unavailable");
+  });
+});
 
 describe("Runway prompt approval", () => {
   test("prepares the exact prompt and settings without credentials or credits", () => {

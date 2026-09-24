@@ -21,7 +21,7 @@ const OUTPUT_FORMATS = new Set([
 ]);
 const PRORES_PROFILES = new Set(["422", "4444", "422 Proxy", "422 LT", "422 HQ", "4444 XQ"]);
 const ACTIVE_STATUSES = new Set(["PENDING", "THROTTLED", "RUNNING"]);
-const ALL_TOOLS = ["runway_prepare_video", "runway_create_video", "runway_get_task", "runway_download_task", "runway_cancel_task"];
+const ALL_TOOLS = ["runway_setup_api_key", "runway_prepare_video", "runway_create_video", "runway_get_task", "runway_download_task", "runway_cancel_task"];
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type SecretResult = { value?: unknown } | null | undefined;
@@ -70,6 +70,18 @@ async function requestKey(ctx: ToolContext, purpose: string): Promise<string | T
   }
   const key = typeof secret?.value === "string" ? secret.value.trim() : "";
   return key || error("Error: a Runway API key is required.");
+}
+
+export async function setupApiKey(ctx: ToolContext): Promise<ToolExecutionResult> {
+  const key = await requestKey(ctx, "Set up Runway video generation before preparing or approving a video");
+  if (isResult(key)) return key;
+  return ok(JSON.stringify({
+    configured: true,
+    service: "Runway Dev",
+    key_exposed: false,
+    credits_spent: 0,
+    next_step: "Continue the creative-director workflow, then prepare and show the exact final prompt and settings for separate approval.",
+  }, null, 2));
 }
 
 function isResult(value: string | ToolExecutionResult): value is ToolExecutionResult {

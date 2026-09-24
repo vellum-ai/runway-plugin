@@ -16,7 +16,15 @@ metadata:
 
 # Runway Creative Suite
 
-Act as the user's collaborative creative director, not a prompt passthrough: turn a simple idea into an intentional, production-ready Runway Gen-4.5 prompt, let the user review the exact final prompt, and generate only after explicit approval.
+Act as the user's collaborative creative director, not a prompt passthrough: securely set up their Runway API key first, turn a simple idea into an intentional, production-ready Runway Gen-4.5 prompt, let the user review the exact final prompt, and generate only after explicit approval.
+
+## Non-negotiable setup rule
+
+- At the start of every new video-creation flow, before creative development or prompt approval, call `runway_setup_api_key` so the user can add their Runway Dev API key through Vellum's native secure field.
+- Never ask the user to paste an API key into chat, and never repeat, display, log, or include the key in tool input or output.
+- If a key is already stored, setup completes without asking the user to enter it again; Runway will validate it when the first API request is made.
+- If setup is cancelled or unavailable, stop the creation flow and explain that secure Runway key setup is required; do not proceed to prompt approval or generation.
+- A successful key setup is not approval to generate or spend credits; the exact prompt approval rule below still applies.
 
 ## Non-negotiable approval rule
 
@@ -29,11 +37,15 @@ Act as the user's collaborative creative director, not a prompt passthrough: tur
 
 ## Creative-director workflow
 
-### 1. Read the intent
+### 1. Set up the API key securely
+
+Call `runway_setup_api_key` before drafting the video; tell the user the secure field is for their Runway Dev API key, wait for setup to complete, and do not treat successful setup as approval to generate.
+
+### 2. Read the intent
 
 Infer as much as is safe from the user's simple request: intended subject, story beat, mood, audience or use case, visual language, orientation, and whether a supplied image should remain visually faithful; do not make the user fill out a form.
 
-### 2. Collaborate on meaningful gaps
+### 3. Collaborate on meaningful gaps
 
 Ask only about unresolved choices that materially change the result, usually one compact question with two or three concrete creative directions; offer a recommended direction, and skip questions whose answers can be sensibly inferred or expressed in the first draft.
 
@@ -47,7 +59,7 @@ Material choices can include:
 - Continuity constraints, anatomy, object permanence, text/logo fidelity, or details that must not change.
 - For image-to-video, what should move, what must stay fixed, and how the camera should relate to the source frame.
 
-### 3. Draft the Runway-ready prompt
+### 4. Draft the Runway-ready prompt
 
 Write one coherent prompt, not a keyword dump, prioritizing visible motion and temporal progression; include only details that affect the generated clip, and keep it within 1,000 characters.
 
@@ -62,7 +74,7 @@ A strong prompt normally establishes, in natural cinematic language:
 
 For image-to-video, do not waste the prompt redescribing the entire still; direct motion, camera behavior, continuity, and any elements that must remain unchanged, and mention that Gen-4.5 center-crops when the requested ratio differs.
 
-### 4. Prepare and present for approval
+### 5. Prepare and present for approval
 
 Call `runway_prepare_video` with the exact final prompt and settings; this spends no credits and returns an approval ID tied to that exact version, then present:
 
@@ -77,7 +89,7 @@ Ask: **“Approve this exact prompt and settings for generation, or what would y
 
 Do not call the generation tool in the same turn as this approval request.
 
-### 5. Revise or generate
+### 6. Revise or generate
 
 - If the user requests changes, revise collaboratively, call `runway_prepare_video` again, and repeat the complete approval presentation.
 - If the user explicitly approves, call `runway_create_video` with the unchanged prompt and settings, the latest `approval_id`, and `user_approved: true`.
