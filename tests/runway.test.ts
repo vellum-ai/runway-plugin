@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ToolContext } from "@vellumai/plugin-api";
-import { cancelTask, createVideo, downloadTask, getTask } from "../src/runway.js";
+import { cancelTask, createVideo, downloadTask, getTask, prepareVideo } from "../src/runway.js";
 
 const ROOT = "/workspace/scratch/runway-plugin-test";
 const ID = "17f20503-6c24-4c16-946b-35dbbce2af2f";
@@ -13,8 +13,59 @@ const ctx = (key: string | null = "runway-secret"): ToolContext => ({
   requestSecret: async () => ({ value: key, delivery: "transient_send" }),
 });
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
+const approved = (input: Record<string, unknown>): Record<string, unknown> => {
+  const prepared = prepareVideo(input);
+  if (prepared.isError) throw new Error(prepared.content);
+  return { ...input, approval_id: JSON.parse(prepared.content).approval_id, user_approved: true };
+};
 
 afterEach(async () => { await rm(ROOT, { recursive: true, force: true }); });
+
+describe("Runway prompt approval", () => {
+  test("prepares the exact prompt and settings without credentials or credits", () => {
+    const result = prepareVideo({
+      prompt: "A cobalt passenger train crosses a snow-covered alpine bridge as sunrise catches the metal; a steady lateral tracking camera holds the train in profile while mist drifts through the valley, realistic motion, restrained warm-and-cobalt palette.",
+      duration: 5,
+      ratio: "1280:720",
+    });
+    expect(result.isError).toBe(false);
+    const prepared = JSON.parse(result.content);
+    expect(prepared.approval_required).toBe(true);
+    expect(prepared.approval_id).toStartWith("runway-v1-");
+    expect(prepared.final_prompt).toContain("steady lateral tracking camera");
+    expect(prepared.settings).toMatchObject({ mode: "text-to-video", duration: 5, ratio: "1280:720", output_format: "mp4" });
+    expect(prepared.estimated_base_credits).toBe(60);
+  });
+
+  test("blocks generation without explicit approval before requesting credentials", async () => {
+    let prompted = false;
+    let fetched = false;
+    const draft = { prompt: "A cobalt train at sunrise", duration: 5, ratio: "1280:720" };
+    const prepared = JSON.parse(prepareVideo(draft).content);
+    const result = await createVideo(
+      { ...draft, approval_id: prepared.approval_id, user_approved: false },
+      { ...ctx(), requestSecret: async () => { prompted = true; return { value: "x" }; } },
+      { fetchImpl: async () => { fetched = true; return json({ id: ID }); } },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("explicit user approval");
+    expect(prompted).toBe(false);
+    expect(fetched).toBe(false);
+  });
+
+  test("rejects stale approval after the prompt changes", async () => {
+    let prompted = false;
+    const draft = { prompt: "A cobalt train at sunrise", duration: 5, ratio: "1280:720" };
+    const prepared = JSON.parse(prepareVideo(draft).content);
+    const result = await createVideo(
+      { ...draft, prompt: "A cobalt train at sunset", approval_id: prepared.approval_id, user_approved: true },
+      { ...ctx(), requestSecret: async () => { prompted = true; return { value: "x" }; } },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("does not match this exact prompt and settings");
+    expect(prompted).toBe(false);
+  });
+});
 
 describe("runway_create_video", () => {
   test("validates before requesting a credential", async () => {
@@ -24,13 +75,14 @@ describe("runway_create_video", () => {
     expect(prompted).toBe(false);
   });
 
-  test("creates a text-to-video task with Gen-4.5", async () => {
+  test("creates an approved text-to-video task with Gen-4.5", async () => {
     let url = "";
     let init: RequestInit | undefined;
+    const input = approved({ prompt: "A cobalt train at sunrise", duration: 5, ratio: "1280:720" });
     const result = await createVideo(
-      { prompt: "A cobalt train at sunrise", duration: 5, ratio: "1280:720" },
+      input,
       ctx(),
-      { fetchImpl: async (input, options) => { url = String(input); init = options; return json({ id: ID, estimatedCost: { credits: 125 } }); } },
+      { fetchImpl: async (request, options) => { url = String(request); init = options; return json({ id: ID, estimatedCost: { credits: 125 } }); } },
     );
     expect(result.isError).toBe(false);
     expect(url).toEndWith("/v1/text_to_video");
@@ -39,9 +91,9 @@ describe("runway_create_video", () => {
     expect(result.content).toContain('"estimated_credits": 125');
   });
 
-  test("reports insufficient credits precisely", async () => {
+  test("reports insufficient credits precisely for an approved version", async () => {
     const result = await createVideo(
-      { prompt: "A cobalt train at sunrise", duration: 2, ratio: "1280:720" },
+      approved({ prompt: "A cobalt train at sunrise", duration: 2, ratio: "1280:720" }),
       ctx(),
       { fetchImpl: async () => json({ error: "You do not have enough credits to run this task." }, 400) },
     );
@@ -49,13 +101,13 @@ describe("runway_create_video", () => {
     expect(result.content).toContain("does not have enough credits");
   });
 
-  test("encodes a workspace-local PNG for image-to-video", async () => {
+  test("encodes a workspace-local PNG for an approved image-to-video version", async () => {
     await mkdir(ROOT, { recursive: true });
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     await writeFile(join(ROOT, "frame.png"), png);
     let body: Record<string, unknown> = {};
     const result = await createVideo(
-      { prompt: "Clouds race overhead", image: "frame.png", ratio: "960:960" },
+      approved({ prompt: "Clouds race overhead", image: "frame.png", ratio: "960:960" }),
       ctx(),
       { fetchImpl: async (_input, init) => { body = JSON.parse(String(init?.body)); return json({ id: ID, estimatedCost: { credits: 126 } }); } },
     );

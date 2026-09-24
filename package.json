@@ -1,7 +1,7 @@
 {
   "name": "runway-plugin",
-  "version": "0.1.0",
-  "description": "Create, track, cancel, and download Runway Gen-4.5 videos conversationally.",
+  "version": "0.2.0",
+  "description": "Collaboratively direct, approve, create, track, cancel, and download Runway Gen-4.5 videos.",
   "type": "module",
   "private": true,
   "engines": {

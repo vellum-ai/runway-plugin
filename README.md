@@ -1,36 +1,41 @@
 # Runway Creative Suite for Vellum
 
-Create, track, cancel, and download Runway Gen-4.5 videos in a Vellum conversation.
+Turn a simple video idea into a collaboratively directed, explicitly approved Runway Gen-4.5 generation, then track and download the result.
 
 ## Capabilities
 
-- Generate video from a text prompt.
-- Animate a JPEG, PNG, or WebP from an HTTPS URL, Runway URI, data URI, or workspace path.
-- Choose duration, orientation, seed, and standard, editorial, grading, or HDR delivery.
-- Check asynchronous task progress and credit usage.
-- Download successful outputs into durable workspace storage.
-- Cancel active tasks without risking deletion of completed generations.
+- Develop a simple request into a detailed cinematic brief instead of passing the user's words straight through.
+- Collaborate on meaningful choices such as story beat, motion, camera, lighting, pacing, style, and continuity.
+- Always show the complete final Runway prompt and settings for explicit user approval.
+- Bind approval to the exact prompt and settings so any revision requires fresh approval.
+- Generate from text or animate a JPEG, PNG, or WebP from an HTTPS URL, Runway URI, data URI, or workspace path.
+- Track asynchronous task progress and credit usage, cancel active work safely, and download durable output files.
 
 ## Tools
 
 | Tool | Description |
 | --- | --- |
-| `runway_create_video` | Starts a Gen-4.5 text-to-video or image-to-video task. |
+| `runway_prepare_video` | Validates an exact prompt and settings, estimates base credits, and returns a no-cost approval ID. |
+| `runway_create_video` | Starts only the exact explicitly approved Gen-4.5 text-to-video or image-to-video version. |
 | `runway_get_task` | Returns status, progress, and credit information. |
 | `runway_download_task` | Downloads successful output and returns file attachments. |
 | `runway_cancel_task` | Cancels active tasks and refuses terminal-task deletion. |
 
 ## How to use
 
-Try prompts such as:
+Start simply:
 
-- “Create a five-second cinematic shot of a cobalt train crossing a snowy mountain bridge at sunrise.”
-- “Animate `scratch/product.png` into a slow clockwise product orbit for a landing-page hero.”
-- “Make that vertical for Reels, eight seconds, as standard MP4.”
-- “Check Runway task `…` and download it when it is ready.”
-- “Cancel that Runway generation.”
+- “Make a cinematic video of a cobalt train crossing a snowy bridge.”
+- “Animate `scratch/product.png` for a landing-page hero.”
+- “I want a moody vertical teaser of a city waking up.”
 
-The assistant confirms material generation settings when needed, starts the asynchronous task, reports its task ID and estimated credit cost, and downloads completed assets instead of exposing Runway's temporary URLs.
+The assistant acts as a creative director: it infers the intent, asks only about unresolved choices that materially change the result, and drafts a production-ready prompt covering the visible action, setting, camera, light, timing, style, and continuity constraints that matter; it then prepares and shows the exact final prompt plus settings and asks for explicit approval, and generation cannot begin until that exact version is approved.
+
+If the user asks for a revision, the assistant prepares a new version and requests fresh approval; after generation it reports the task ID and credit estimate, checks status on request, and downloads completed assets instead of exposing Runway's temporary URLs.
+
+## Approval safety
+
+`runway_prepare_video` creates a deterministic approval ID bound to the final prompt, input image, duration, ratio, seed, output format, and ProRes profile; `runway_create_video` rejects missing approval, a non-explicit approval attestation, and stale approval after any bound field changes, before requesting credentials or contacting Runway.
 
 ## Install
 
@@ -56,7 +61,7 @@ assistant plugins install https://github.com/vellum-ai/runway-plugin
 
 ## Data and privacy
 
-The Runway API key is requested through Vellum's credential vault and is only authorized for `api.dev.runwayml.com`; it is never stored in plugin source or output files. Prompts and supplied media are sent to Runway Dev to create the requested generation. Local images are read only from inside the workspace and encoded as data URIs, with a 3.3 MB binary limit. Runway output links expire within 24–48 hours, so this plugin downloads successful outputs into the workspace rather than exposing those links directly.
+The Runway API key is requested through Vellum's credential vault and is only authorized for `api.dev.runwayml.com`; it is never stored in plugin source or output files. Prompts and supplied media are sent to Runway Dev only after the final prompt and settings are explicitly approved. Local images are read only from inside the workspace and encoded as data URIs, with a 3.3 MB binary limit. Runway output links expire within 24–48 hours, so this plugin downloads successful outputs into the workspace rather than exposing those links directly.
 
 ## License
 

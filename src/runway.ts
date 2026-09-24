@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -20,7 +21,7 @@ const OUTPUT_FORMATS = new Set([
 ]);
 const PRORES_PROFILES = new Set(["422", "4444", "422 Proxy", "422 LT", "422 HQ", "4444 XQ"]);
 const ACTIVE_STATUSES = new Set(["PENDING", "THROTTLED", "RUNNING"]);
-const ALL_TOOLS = ["runway_create_video", "runway_get_task", "runway_download_task", "runway_cancel_task"];
+const ALL_TOOLS = ["runway_prepare_video", "runway_create_video", "runway_get_task", "runway_download_task", "runway_cancel_task"];
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type SecretResult = { value?: unknown } | null | undefined;
@@ -215,6 +216,56 @@ function parseCreateInput(input: JsonRecord):
   return { prompt, image, duration, ratio, ...(seed !== undefined ? { seed } : {}), ...(outputFormat ? { outputFormat } : {}), ...(proresProfile ? { proresProfile } : {}) };
 }
 
+type ParsedCreateInput = Exclude<ReturnType<typeof parseCreateInput>, ToolExecutionResult>;
+
+function approvalId(parsed: ParsedCreateInput): string {
+  const bound = JSON.stringify({
+    prompt: parsed.prompt,
+    image: parsed.image,
+    duration: parsed.duration,
+    ratio: parsed.ratio,
+    seed: parsed.seed ?? null,
+    output_format: parsed.outputFormat ?? "mp4",
+    prores_profile: parsed.proresProfile ?? null,
+  });
+  return `runway-v1-${createHash("sha256").update(bound).digest("hex")}`;
+}
+
+export function prepareVideo(input: JsonRecord): ToolExecutionResult {
+  const parsed = parseCreateInput(input);
+  if ("isError" in parsed) return parsed;
+  return ok(JSON.stringify({
+    approval_id: approvalId(parsed),
+    approval_required: true,
+    final_prompt: parsed.prompt,
+    settings: {
+      mode: parsed.image ? "image-to-video" : "text-to-video",
+      image: parsed.image,
+      duration: parsed.duration,
+      ratio: parsed.ratio,
+      seed: parsed.seed ?? null,
+      output_format: parsed.outputFormat ?? "mp4",
+      prores_profile: parsed.proresProfile ?? null,
+    },
+    estimated_base_credits: parsed.duration * 12,
+    next_step: "Show this exact prompt and settings to the user. Generate only after explicit approval; any change requires a new approval ID.",
+  }, null, 2));
+}
+
+function validateApproval(input: JsonRecord, parsed: ParsedCreateInput): ToolExecutionResult | null {
+  if (input.user_approved !== true) {
+    return error("Error: explicit user approval is required before generation; prepare and show the final prompt and settings first.");
+  }
+  const supplied = safeString(input.approval_id);
+  if (!supplied) {
+    return error("Error: approval_id from runway_prepare_video is required.");
+  }
+  if (supplied !== approvalId(parsed)) {
+    return error("Error: approval does not match this exact prompt and settings; prepare the revised version and obtain fresh user approval.");
+  }
+  return null;
+}
+
 async function responseJson(response: Response): Promise<JsonRecord | ToolExecutionResult> {
   try {
     const value = await response.json();
@@ -227,7 +278,9 @@ async function responseJson(response: Response): Promise<JsonRecord | ToolExecut
 export async function createVideo(input: JsonRecord, ctx: ToolContext, deps: RunwayDeps = {}): Promise<ToolExecutionResult> {
   const parsed = parseCreateInput(input);
   if ("isError" in parsed) return parsed;
-  const key = await requestKey(ctx, "Create or manage Runway video generations");
+  const approvalError = validateApproval(input, parsed);
+  if (approvalError) return approvalError;
+  const key = await requestKey(ctx, "Create an explicitly approved Runway video generation");
   if (isResult(key)) return key;
   const image = parsed.image ? await resolveImage(parsed.image, ctx) : null;
   if (image && isResult(image)) return image;
